@@ -83,6 +83,7 @@ function useOrganizationProjects({
     },
     enabled: !!(orgRegion && organization),
     refetchOnWindowFocus: true,
+    retry: false,
   });
 }
 
@@ -128,7 +129,16 @@ function ProjectSelection({hash, organizations = []}: Omit<Props, 'allowSelectio
     if (organizations.length === 1) {
       return organizations[0].id;
     }
-    // Pre-fill the last used org if there are multiple
+
+    const urlParams = new URLSearchParams(location.search);
+    const orgSlug = urlParams.get('org_slug');
+    const orgMatchingSlug = orgSlug && organizations.find(org => org.slug === orgSlug);
+
+    if (orgMatchingSlug) {
+      return orgMatchingSlug.id;
+    }
+
+    // Pre-fill the last used org if there are multiple and no URL param
     if (lastOrganization) {
       return lastOrganization.id;
     }
@@ -145,11 +155,6 @@ function ProjectSelection({hash, organizations = []}: Omit<Props, 'allowSelectio
     organization: selectedOrg,
     query: debouncedSearch,
   });
-
-  const selectedProject = useMemo(
-    () => orgProjectsRequest.data?.find(org => org.id === selectedProjectId),
-    [orgProjectsRequest.data, selectedProjectId]
-  );
 
   const {
     mutate: updateCache,
@@ -203,6 +208,7 @@ function ProjectSelection({hash, organizations = []}: Omit<Props, 'allowSelectio
         value: project.id,
         label: project.name,
         leadingItems: <ProjectBadge avatarSize={16} project={project} hideName />,
+        project,
       })),
     [orgProjectsRequest.data]
   );
@@ -219,6 +225,14 @@ function ProjectSelection({hash, organizations = []}: Omit<Props, 'allowSelectio
     [cachedProjectOptions]
   );
 
+  // Select the project from the cached options to avoid visually clearing the input
+  // when searching while having a selected project
+  const selectedProject = useMemo(
+    () =>
+      sortedProjectOptions?.find(option => option.value === selectedProjectId)?.project,
+    [selectedProjectId, sortedProjectOptions]
+  );
+
   const isFormValid = selectedOrg && selectedProject;
 
   if (isSuccess) {
@@ -231,6 +245,7 @@ function ProjectSelection({hash, organizations = []}: Omit<Props, 'allowSelectio
       <FieldWrapper>
         <label>{t('Organization')}</label>
         <StyledCompactSelect
+          autoFocus
           value={selectedOrgId as string}
           searchable
           options={orgOptions}
@@ -267,6 +282,7 @@ function ProjectSelection({hash, organizations = []}: Omit<Props, 'allowSelectio
             // TODO(aknaus): investigate why the selection is not reset when the value changes to null
             key={selectedOrgId}
             onSearch={setSearch}
+            onClose={() => setSearch('')}
             disabled={!selectedOrgId}
             value={selectedProjectId as string}
             searchable
